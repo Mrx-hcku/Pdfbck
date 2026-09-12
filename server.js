@@ -3,9 +3,11 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const axios = require('axios');
 const FormData = require('form-data');
+const cors = require('cors');
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 // Hardcoded Configurations
 const MONGO_URI = 'mongodb+srv://Rahul:AdminSong@cluster0.kus25.mongodb.net/socialDB?retryWrites=true&w=majority&appName=Cluster0';
@@ -124,3 +126,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
+        
