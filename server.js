@@ -31,6 +31,7 @@ mongoose.connect(MONGO_URI)
 const materialSchema = new mongoose.Schema({
   title: String,
   author: String,
+  category: { type: String, default: 'General' },
   isPaid: Boolean,
   price: String,
   followRequired: Boolean,
@@ -48,7 +49,7 @@ app.get('/', (req, res) => {
 // 1. Upload PDF Endpoint
 app.post('/api/upload', upload.single('pdf'), async (req, res) => {
   try {
-    const { title, author, isPaid, price, followRequired } = req.body;
+    const { title, author, category, isPaid, price, followRequired } = req.body;
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'PDF file is required' });
     }
@@ -74,6 +75,7 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
     const newMaterial = new Material({
       title,
       author,
+      category: category && category.trim() !== '' ? category.trim() : 'General',
       isPaid: isPaid === 'true',
       price: price || 'Free',
       followRequired: followRequired === 'true',
@@ -94,17 +96,41 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
   }
 });
 
-// 2. Fetch All Materials Feed
+// 2. Fetch Materials Feed (optionally filtered by ?author= or ?category=)
 app.get('/api/materials', async (req, res) => {
   try {
-    const materials = await Material.find({}).sort({ createdAt: -1 });
+    const filter = {};
+    if (req.query.author) filter.author = req.query.author;
+    if (req.query.category) filter.category = req.query.category;
+
+    const materials = await Material.find(filter).sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: materials });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// 3. Get Direct Download URL from Telegram File ID
+// 3. Get list of distinct categories (for the upload screen's selector)
+app.get('/api/categories', async (req, res) => {
+  try {
+    const categories = await Material.distinct('category');
+    res.status(200).json({ success: true, data: categories.filter(Boolean) });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 4. Get list of distinct teachers/authors (for the "Suggested teachers" row)
+app.get('/api/teachers', async (req, res) => {
+  try {
+    const teachers = await Material.distinct('author');
+    res.status(200).json({ success: true, data: teachers.filter(Boolean) });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 5. Get Direct Download URL from Telegram File ID
 app.get('/api/download/:id', async (req, res) => {
   try {
     const material = await Material.findById(req.params.id);
@@ -131,4 +157,4 @@ app.get('/api/download/:id', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
-      
+                                   
