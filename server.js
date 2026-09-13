@@ -9,21 +9,24 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Hardcoded Configurations
-const MONGO_URI = 'mongodb+srv://Rahul:AdminSong@cluster0.kus25.mongodb.net/socialDB?retryWrites=true&w=majority&appName=Cluster0';
-const TELEGRAM_BOT_TOKEN = '8914960632:AAEbiR70JZBYXgYZ3cbxRP0Ekkv9U6wCYIo';
-const TELEGRAM_CHANNEL_ID = '-1003947413983';
+// ---- Config from environment variables (set these on your hosting platform) ----
+const MONGO_URI = process.env.MONGO_URI;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID;
+const PORT = process.env.PORT || 3000;
+
+if (!MONGO_URI || !TELEGRAM_BOT_TOKEN || !TELEGRAM_CHANNEL_ID) {
+  console.error('Missing required environment variables: MONGO_URI, TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID');
+  process.exit(1);
+}
 
 // Memory storage for handling file uploads before sending to Telegram
 const upload = multer({ storage: multer.memoryStorage() });
 
 // MongoDB Connection
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('MongoDB Connected Successfully'))
-.catch((err) => console.error('MongoDB Connection Error:', err));
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('MongoDB Connected Successfully'))
+  .catch((err) => console.error('MongoDB Connection Error:', err));
 
 const materialSchema = new mongoose.Schema({
   title: String,
@@ -33,7 +36,7 @@ const materialSchema = new mongoose.Schema({
   followRequired: Boolean,
   telegramFileId: String,
   fileSize: String,
-});
+}, { timestamps: true });
 
 const Material = mongoose.model('Material', materialSchema);
 
@@ -61,7 +64,7 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
     const tgResponse = await axios.post(
       `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`,
       formData,
-      { headers: formData.getHeaders() }
+      { headers: formData.getHeaders(), timeout: 30000 }
     );
 
     const telegramFileId = tgResponse.data.result.document.file_id;
@@ -86,6 +89,7 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
       data: newMaterial,
     });
   } catch (error) {
+    console.error('Upload error:', error.response?.data || error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -93,7 +97,7 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
 // 2. Fetch All Materials Feed
 app.get('/api/materials', async (req, res) => {
   try {
-    const materials = await Material.find({});
+    const materials = await Material.find({}).sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: materials });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -110,7 +114,8 @@ app.get('/api/download/:id', async (req, res) => {
 
     // Request fresh file path from Telegram Bot API
     const fileInfoRes = await axios.get(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${material.telegramFileId}`
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${material.telegramFileId}`,
+      { timeout: 15000 }
     );
 
     const filePath = fileInfoRes.data.result.file_path;
@@ -118,12 +123,12 @@ app.get('/api/download/:id', async (req, res) => {
 
     res.status(200).json({ success: true, downloadUrl });
   } catch (error) {
+    console.error('Download error:', error.response?.data || error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Backend server running on port ${PORT}`);
 });
-        
+      
